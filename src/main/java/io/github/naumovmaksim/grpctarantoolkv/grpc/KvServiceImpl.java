@@ -34,6 +34,9 @@ public class KvServiceImpl extends KvServiceGrpc.KvServiceImplBase {
         if (request.hasValue()) {
             value = request.getValue().toByteArray();
         }
+        if (request.getKey().isEmpty()) {
+            throw new RuntimeException("Failed to put new key, because the key is blank");
+        }
 
         repository.put(request.getKey(), value);
 

@@ -1,6 +1,8 @@
 package io.github.naumovmaksim.grpctarantoolkv;
 
 import io.github.naumovmaksim.grpctarantoolkv.grpc.KvServiceImpl;
+import io.github.naumovmaksim.grpctarantoolkv.repository.InMemoryKvRepository;
+import io.github.naumovmaksim.grpctarantoolkv.repository.KvRepository;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 
@@ -19,8 +21,10 @@ public class Application {
     }
 
     private void start() throws IOException {
+        KvRepository repository = new InMemoryKvRepository();
+
         server = ServerBuilder.forPort(PORT)
-                .addService(new KvServiceImpl())
+                .addService(new KvServiceImpl(repository))
                 .build()
                 .start();
 

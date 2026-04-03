@@ -122,7 +122,7 @@ docker compose down -v
 
 1. Поднять Tarantool через Docker Compose
 ```
-docker compose up tarantool
+docker compose up -d tarantool
 ```
 Tarantool запускается с конфигурацией из файла:
 `docker/tarantool/init.lua`

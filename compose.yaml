@@ -1,0 +1,36 @@
+name: grpc-tarantool-kv-service
+
+services:
+  tarantool:
+    image: tarantool/tarantool:3.2
+    container_name: tarantool-kv
+    command: ["tarantool", "/opt/tarantool/init.lua"]
+    ports:
+      - "3301:3301"
+    volumes:
+      - tarantool_data:/var/lib/tarantool
+      - ./docker/tarantool/init.lua:/opt/tarantool/init.lua:ro
+    healthcheck:
+      test: ["CMD", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grpc-tarantool-kv-app
+    depends_on:
+      tarantool:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      TARANTOOL_HOST: tarantool
+    ports:
+      - "${GRPC_PORT}:9090"
+
+volumes:
+  tarantool_data:

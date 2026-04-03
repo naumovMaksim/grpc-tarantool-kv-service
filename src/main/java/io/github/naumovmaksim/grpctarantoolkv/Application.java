@@ -17,8 +17,7 @@ import java.util.Collections;
 
 public class Application {
     private final static Logger log = LoggerFactory.getLogger(Application.class);
-    //Константы нужно выность например в .env, но тут они захрдкожены намеренно в целях
-    // более простого и быстрого запуска
+
     private static final int GRPC_PORT =
             Integer.parseInt(System.getenv().getOrDefault("GRPC_PORT", "9090"));
 

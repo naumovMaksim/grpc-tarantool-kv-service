@@ -14,6 +14,9 @@ import io.github.naumovmaksim.grpctarantoolkv.proto.PutResponse;
 import io.github.naumovmaksim.grpctarantoolkv.proto.RangeRequest;
 import io.github.naumovmaksim.grpctarantoolkv.proto.RangeResponse;
 import io.github.naumovmaksim.grpctarantoolkv.repository.KvRepository;
+import io.github.naumovmaksim.grpctarantoolkv.validation.RequestValidator;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 import java.util.List;
@@ -29,84 +32,140 @@ public class KvServiceImpl extends KvServiceGrpc.KvServiceImplBase {
 
     @Override
     public void put(PutRequest request, StreamObserver<PutResponse> responseObserver) {
-        byte[] value = null;
+        try {
+            RequestValidator.validateKey(request.getKey(), "key");
 
-        if (request.hasValue()) {
-            value = request.getValue().toByteArray();
+            byte[] val = null;
+            if (request.hasValue()) {
+                val = request.getValue().toByteArray();
+            }
+
+            repository.put(request.getKey(), val);
+
+            PutResponse resp = PutResponse.newBuilder().build();
+            responseObserver.onNext(resp);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            handleError(e, responseObserver);
         }
-        if (request.getKey().isEmpty()) {
-            throw new RuntimeException("Failed to put new key, because the key is blank");
-        }
-
-        repository.put(request.getKey(), value);
-
-        PutResponse response = PutResponse.newBuilder().build();
-
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
     }
 
     @Override
     public void get(GetRequest request, StreamObserver<GetResponse> responseObserver) {
-        Optional<KvRecord> optionalRecord = repository.get(request.getKey());
+        try {
+            RequestValidator.validateKey(request.getKey(), "key");
 
-        GetResponse.Builder builder = GetResponse.newBuilder()
-                .setKey(request.getKey());
+            Optional<KvRecord> optionalRecord = repository.get(request.getKey());
 
-        if (optionalRecord.isEmpty()) {
-            builder.setFound(false);
-        } else {
-            KvRecord record = optionalRecord.get();
-            builder.setFound(true);
+            GetResponse.Builder builder = GetResponse.newBuilder()
+                    .setKey(request.getKey());
 
-            if (record.getValue() != null) {
-                builder.setValue(ByteString.copyFrom(record.getValue()));
+            if (optionalRecord.isEmpty()) {
+                builder.setFound(false);
+            } else {
+                KvRecord record = optionalRecord.get();
+                builder.setFound(true);
+
+                if (record.getValue() != null) {
+                    builder.setValue(ByteString.copyFrom(record.getValue()));
+                }
             }
-        }
 
-        responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            handleError(e, responseObserver);
+        }
     }
 
     @Override
     public void delete(DeleteRequest request, StreamObserver<DeleteResponse> responseObserver) {
-        boolean deleted = repository.delete(request.getKey());
+        try {
+            RequestValidator.validateKey(request.getKey(), "key");
 
-        DeleteResponse response = DeleteResponse.newBuilder()
-                .setDeleted(deleted)
-                .build();
+            boolean deleted = repository.delete(request.getKey());
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            DeleteResponse response = DeleteResponse.newBuilder()
+                    .setDeleted(deleted)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            handleError(e, responseObserver);
+        }
     }
 
     @Override
     public void range(RangeRequest request, StreamObserver<RangeResponse> responseObserver) {
-        List<KvRecord> records = repository.range(request.getKeySince(), request.getKeyTo());
+        try {
+            RequestValidator.validateRange(request.getKeySince(), request.getKeyTo());
 
-        for (KvRecord record : records) {
-            RangeResponse.Builder builder = RangeResponse.newBuilder()
-                    .setKey(record.getKey());
+            List<KvRecord> records = repository.range(request.getKeySince(), request.getKeyTo());
 
-            if (record.getValue() != null) {
-                builder.setValue(ByteString.copyFrom(record.getValue()));
+            for (KvRecord record : records) {
+                RangeResponse.Builder builder = RangeResponse.newBuilder()
+                        .setKey(record.getKey());
+
+                if (record.getValue() != null) {
+                    builder.setValue(ByteString.copyFrom(record.getValue()));
+                }
+
+                responseObserver.onNext(builder.build());
             }
 
-            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            handleError(e, responseObserver);
         }
-
-        responseObserver.onCompleted();
     }
 
     @Override
     public void count(CountRequest request, StreamObserver<CountResponse> responseObserver) {
-        long count = repository.count();
+        try {
+            long count = repository.count();
 
-        CountResponse response = CountResponse.newBuilder()
-                .setCount(count)
-                .build();
+            CountResponse response = CountResponse.newBuilder()
+                    .setCount(count)
+                    .build();
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            handleError(e, responseObserver);
+        }
+    }
+
+    private void handleError(Exception exception, StreamObserver<?> responseObserver) {
+        if (exception instanceof StatusRuntimeException) {
+            responseObserver.onError(exception);
+            return;
+        }
+
+        if (exception instanceof IllegalArgumentException) {
+            responseObserver.onError(
+                    Status.INVALID_ARGUMENT
+                            .withDescription(exception.getMessage())
+                            .asRuntimeException()
+            );
+            return;
+        }
+
+        if (exception instanceof RuntimeException) {
+            responseObserver.onError(
+                    Status.UNAVAILABLE
+                            .withDescription("Storage is unavailable")
+                            .withCause(exception)
+                            .asRuntimeException()
+            );
+            return;
+        }
+
+        responseObserver.onError(
+                Status.INTERNAL
+                        .withDescription("Unexpected server error")
+                        .withCause(exception)
+                        .asRuntimeException()
+        );
     }
 }
